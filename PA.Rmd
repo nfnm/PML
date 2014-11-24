@@ -1,0 +1,96 @@
+= Practical Machine Learning - Course Project =
+
+This my Course Project write-up for Practical Machine learning, November 2014
+
+I chose a random forest model with five fold cross-validation.   The results are extremely good, at less than 1% misclassification.
+
+The training data was provied in pml-training.csv and contains 19622 observations of 160 varibables. 
+
+I expect the out of sample error for pml-testing.csv to very low because it's from the same source as the training data in and because of the large amount of data used to train the model.
+
+I chose to limit the prediction columns to those that actually appear in pml-testing.csv (which I call the quiz set).   I also excluded these columns, since I don't think they're relevant to the
+prediction:
+
+X
+user_name
+raw_timestamp_part_1
+raw_timestamp_part_2
+cvtd_timestamp
+new_window
+problem_id
+
+I didn't remove any specific rows.
+
+This left 53 columns (ie variables per observation).
+
+An annotated run is below.
+
+Thank you for taking the time to review this.
+
+
+Run on 4 cores to improve run-times.
+```{r}
+library(caret)
+library(doMC)
+registerDoMC(cores = 4)
+set.seed(1)
+```
+Determine which columns we can predict by examining what's available in pml-testing.csv.
+
+I'll refer to the data in pml-testing.csv as the "quiz"" set to avoid confusion the test set derived from within pml-training.csv.
+ 
+The values in skipColumns values are explicity skiped.   All columns that only contain NAs are also skipped.
+```{r}
+quiz <- read.csv("pml-testing.csv")
+skipColumns = c("X", "user_name", "raw_timestamp_part_1", "raw_timestamp_part_2", "cvtd_timestamp", "new_window", "problem_id")
+quizCopy <- quiz
+quizCopy[, skipColumns]=NA
+availableData <- subset(quizCopy, select=colMeans(is.na(quizCopy)) == 0)
+availableColumns <- names(availableData)
+```
+Get the contents of pml-training.csv and keep only the columns needed for the prediction from the "quiz" and as well as "classe."
+```{r}
+train <- read.csv("pml-training.csv")
+trainAvailableColumnNames = append(c("classe"), availableColumns)
+trainAvailableColumns <- train[,trainAvailableColumnNames]
+```
+Split pml-training.csv into training and test sets.
+```{r}
+inTrain <- createDataPartition(y=trainAvailableColumns$classe,p=0.6, list=FALSE)
+training <- trainAvailableColumns[inTrain,]
+testing <- trainAvailableColumns[-inTrain,]
+```
+Build the model using a random forest and 5-fold cross validation
+```{r}
+train_control <- trainControl(method="cv", number=5)
+print(system.time(modFit <- train(classe~ .,data=training,method="rf", trControl=train_control,prox=TRUE)))
+```
+Display the model
+```{r}
+print(modFit)
+```
+Test the model
+```{r}
+print(system.time(testingPredictions <- predict(modFit, newdata=testing)))
+testingResults <- testingPredictions == testing$classe
+print(sprintf("Accurcy of testing: %g", sum(testingResults) / length(testingResults)))
+```
+Build the predictions
+```{r}
+print(system.time(quizPredictions <- predict(modFit, newdata=quiz)))
+print(quizPredictions)
+```
+
+```{r, echo=FALSE}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+pml_write_files(quizPredictions)
+```
+
+
+
